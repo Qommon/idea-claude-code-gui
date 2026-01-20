@@ -15,6 +15,7 @@
 
 import { handleClaudeCommand } from './channels/claude-channel.js';
 import { handleCodexCommand } from './channels/codex-channel.js';
+import { getSlashCommands as claudeGetSlashCommands } from './services/claude/message-service.js';
 import { clearSdkCache, getClaudeSdkVersion, getCodexSdkVersion, getSdkStatus, isClaudeSdkAvailable, isCodexSdkAvailable } from './utils/sdk-loader.js';
 import * as readline from 'readline';
 import * as fs from 'fs';
@@ -42,6 +43,121 @@ function getWorkspaceRoot() {
     return WORKSPACE_ROOT;
   }
   return process.cwd();
+}
+
+const FILE_LIST_MAX_RESULTS = 200;
+const FILE_LIST_MAX_DEPTH = 15;
+const FILE_LIST_MAX_CHILDREN = 100;
+const FILE_LIST_HIDDEN = new Set(['.DS_Store', '.git', 'node_modules', '.idea']);
+
+function normalizeDisplayPath(value) {
+  return String(value || '').replace(/\\/g, '/');
+}
+
+function shouldHideListEntry(name) {
+  return FILE_LIST_HIDDEN.has(name);
+}
+
+function buildFileItem(entry, entryPath, workspaceRoot) {
+  const type = entry.isDirectory() ? 'directory' : 'file';
+  let relativePath = entryPath;
+  if (workspaceRoot && entryPath.startsWith(workspaceRoot)) {
+    relativePath = path.relative(workspaceRoot, entryPath);
+  }
+
+  const item = {
+    name: entry.name,
+    path: normalizeDisplayPath(relativePath),
+    absolutePath: entryPath,
+    type,
+  };
+
+  if (!entry.isDirectory()) {
+    const ext = path.extname(entry.name).replace('.', '');
+    if (ext) {
+      item.extension = ext;
+    }
+  }
+
+  return item;
+}
+
+function resolveListBaseDir(workspaceRoot, currentPath) {
+  const trimmed = (currentPath || '').trim();
+  const root = workspaceRoot || process.cwd();
+
+  if (!trimmed) {
+    return { baseDir: root };
+  }
+
+  if (path.isAbsolute(trimmed)) {
+    return { baseDir: trimmed };
+  }
+
+  return { baseDir: path.join(root, trimmed) };
+}
+
+function listDirectoryEntries(baseDir, workspaceRoot, query) {
+  const results = [];
+  if (!baseDir || !fs.existsSync(baseDir)) {
+    return results;
+  }
+
+  let entries = [];
+  try {
+    entries = fs.readdirSync(baseDir, { withFileTypes: true });
+  } catch (error) {
+    console.error('[server] Failed to read directory:', error?.message || error);
+    return results;
+  }
+
+  const lowerQuery = query ? query.toLowerCase() : '';
+  for (const entry of entries) {
+    if (shouldHideListEntry(entry.name)) continue;
+    if (lowerQuery && !entry.name.toLowerCase().includes(lowerQuery)) continue;
+
+    const entryPath = path.join(baseDir, entry.name);
+    results.push(buildFileItem(entry, entryPath, workspaceRoot));
+
+    if (results.length >= FILE_LIST_MAX_CHILDREN) {
+      break;
+    }
+  }
+
+  return results;
+}
+
+function searchFilesRecursive(baseDir, workspaceRoot, query, results, depth) {
+  if (!baseDir || depth > FILE_LIST_MAX_DEPTH || results.length >= FILE_LIST_MAX_RESULTS) {
+    return;
+  }
+
+  let entries = [];
+  try {
+    entries = fs.readdirSync(baseDir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+
+  const lowerQuery = query.toLowerCase();
+  for (const entry of entries) {
+    if (shouldHideListEntry(entry.name)) continue;
+
+    const entryPath = path.join(baseDir, entry.name);
+    if (entry.name.toLowerCase().includes(lowerQuery)) {
+      results.push(buildFileItem(entry, entryPath, workspaceRoot));
+      if (results.length >= FILE_LIST_MAX_RESULTS) {
+        return;
+      }
+    }
+
+    if (entry.isDirectory()) {
+      searchFilesRecursive(entryPath, workspaceRoot, query, results, depth + 1);
+      if (results.length >= FILE_LIST_MAX_RESULTS) {
+        return;
+      }
+    }
+  }
 }
 
 // Current state
@@ -1166,6 +1282,41 @@ function normalizeMessageType(type) {
   return typeMap[type] || type;
 }
 
+const AGENT_PROMPT_CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
+
+function normalizeSendMessageContent(raw) {
+  if (!raw) return {};
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (!trimmed) return { text: '' };
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      try {
+        return JSON.parse(trimmed);
+      } catch (error) {
+        console.error('[server] Failed to parse send_message payload JSON:', error?.message || error);
+      }
+    }
+    return { text: raw };
+  }
+  if (typeof raw === 'object') return raw;
+  return {};
+}
+
+function sanitizeAgentPrompt(value) {
+  if (typeof value !== 'string') return null;
+  const cleaned = value.replace(AGENT_PROMPT_CONTROL_CHARS, '');
+  const trimmed = cleaned.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function extractAgentPrompt(content) {
+  if (!content || typeof content !== 'object') return null;
+  const direct = typeof content.agentPrompt === 'string' ? content.agentPrompt : null;
+  const agentObj = content.agent && typeof content.agent === 'object' ? content.agent : null;
+  const fromAgent = agentObj && typeof agentObj.prompt === 'string' ? agentObj.prompt : null;
+  return sanitizeAgentPrompt(direct ?? fromAgent);
+}
+
 /**
  * Handle incoming message from Extension Host
  */
@@ -1462,6 +1613,10 @@ async function handleMessage(message) {
         handleGetUsageStatistics(content, requestId);
         break;
 
+      case 'listFiles':
+        handleListFiles(content, requestId);
+        break;
+
       // === File Operations (forwarded to extension) ===
       case 'openFile':
       case 'openBrowser':
@@ -1469,7 +1624,6 @@ async function handleMessage(message) {
       case 'showDiff':
       case 'showMultiEditDiff':
       case 'rewindFiles':
-      case 'listFiles':
       case 'saveJson':
         // These are handled by the extension, forward them back
         sendToHost('fileOperation', { operation: type, ...content }, requestId);
@@ -1481,7 +1635,7 @@ async function handleMessage(message) {
         break;
 
       case 'refreshSlashCommands':
-        handleRefreshSlashCommands(requestId);
+        await handleRefreshSlashCommands(requestId);
         break;
 
       case 'getNodePath':
@@ -1539,17 +1693,28 @@ async function handleMessage(message) {
 // ============================================
 
 async function handleSendMessage(content, requestId) {
-  const { text, sessionId, provider = currentProvider } = content || {};
+  const normalizedContent = normalizeSendMessageContent(content);
+  const { text, sessionId, provider = currentProvider } = normalizedContent;
+  const messageText = typeof text === 'string' ? text : '';
   const isCodexProvider = provider === 'codex' || provider === 'openai';
   const isClaudeProvider = !isCodexProvider;
   const allowedPermissionModes = new Set(['acceptEdits', 'bypassPermissions', 'default', 'delegate', 'dontAsk', 'plan']);
-  const requestedPermissionModeRaw = content?.permissionMode;
+  const requestedPermissionModeRaw = normalizedContent?.permissionMode ?? currentMode;
   const effectivePermissionMode =
     requestedPermissionModeRaw === 'ask'
       ? 'default'
       : (typeof requestedPermissionModeRaw === 'string' && allowedPermissionModes.has(requestedPermissionModeRaw))
         ? requestedPermissionModeRaw
         : 'default';
+  const requestedModel = typeof normalizedContent?.model === 'string' && normalizedContent.model
+    ? normalizedContent.model
+    : currentModel;
+  const requestedReasoningEffort = typeof normalizedContent?.reasoningEffort === 'string' && normalizedContent.reasoningEffort
+    ? normalizedContent.reasoningEffort
+    : currentReasoningEffort;
+  const agentPrompt = extractAgentPrompt(normalizedContent);
+  const openedFiles = normalizedContent?.openedFiles;
+  const attachments = Array.isArray(normalizedContent?.attachments) ? normalizedContent.attachments : [];
 
   const settings = loadJsonFile(SETTINGS_FILE, {});
   const streamingEnabled = settings.streamingEnabled !== false;
@@ -1576,12 +1741,22 @@ async function handleSendMessage(content, requestId) {
       let structuredErrorEmitted = false;
       const stdinData = {
         sessionId: sessionId || currentSessionId,
-        message: text,
-        cwd: content?.workingDirectory || getWorkspaceRoot(),
+        message: messageText,
+        cwd: normalizedContent?.workingDirectory || getWorkspaceRoot(),
         permissionMode: effectivePermissionMode,
+        model: requestedModel,
         streaming: streamingEnabled,
         thinkingEnabled
       };
+      if (agentPrompt) {
+        stdinData.agentPrompt = agentPrompt;
+      }
+      if (openedFiles && typeof openedFiles === 'object') {
+        stdinData.openedFiles = openedFiles;
+      }
+      if (attachments.length > 0) {
+        stdinData.attachments = attachments;
+      }
 
       // Intercept Claude SDK output and convert to streamChunk messages
       interceptConsoleLog((output) => {
@@ -1686,7 +1861,8 @@ async function handleSendMessage(content, requestId) {
         }
       });
 
-      await handleClaudeCommand('send', [], stdinData);
+      const claudeCommand = attachments.length > 0 ? 'sendWithAttachments' : 'send';
+      await handleClaudeCommand(claudeCommand, [], stdinData);
       restoreConsoleLog();
 
       if (!streamingEnabled && bufferedContent) {
@@ -1697,10 +1873,14 @@ async function handleSendMessage(content, requestId) {
     } else if (isCodexProvider && isCodexSdkAvailable()) {
       const stdinData = {
         sessionId: sessionId || currentSessionId,
-        message: text,
+        message: messageText,
         threadId: sessionId || currentSessionId,
-        cwd: content?.workingDirectory || process.cwd(),
-        permissionMode: effectivePermissionMode
+        cwd: normalizedContent?.workingDirectory || process.cwd(),
+        permissionMode: effectivePermissionMode,
+        model: requestedModel,
+        reasoningEffort: requestedReasoningEffort,
+        baseUrl: normalizedContent?.baseUrl,
+        apiKey: normalizedContent?.apiKey
       };
       await handleCodexCommand('send', [], stdinData);
     } else {
@@ -2918,6 +3098,37 @@ function handleGetUsageStatistics(content, requestId) {
   sendToHost('usageStatisticsLoaded', stats, requestId);
 }
 
+function handleListFiles(content, requestId) {
+  const query = typeof content?.query === 'string' ? content.query.trim() : '';
+  const currentPath = typeof content?.currentPath === 'string' ? content.currentPath.trim() : '';
+  const workspaceRoot = getWorkspaceRoot();
+  let { baseDir } = resolveListBaseDir(workspaceRoot, currentPath);
+
+  try {
+    if (!baseDir || !fs.existsSync(baseDir) || !fs.statSync(baseDir).isDirectory()) {
+      baseDir = workspaceRoot || process.cwd();
+    }
+  } catch {
+    baseDir = workspaceRoot || process.cwd();
+  }
+
+  let files = [];
+  if (query) {
+    searchFilesRecursive(baseDir, workspaceRoot || baseDir, query, files, 0);
+  } else {
+    files = listDirectoryEntries(baseDir, workspaceRoot || baseDir, '');
+  }
+
+  files.sort((a, b) => {
+    if (a.type !== b.type) {
+      return a.type === 'directory' ? -1 : 1;
+    }
+    return a.path.localeCompare(b.path);
+  });
+
+  sendToHost('fileListResult', { files }, requestId);
+}
+
 // ============================================
 // Additional Session Handlers
 // ============================================
@@ -3704,9 +3915,14 @@ function handleFrontendReady(requestId) {
   }, requestId);
 }
 
-function handleRefreshSlashCommands(requestId) {
-  // Return empty slash commands for now - can be populated from SDK
-  sendToHost('slashCommandsUpdated', { commands: [] }, requestId);
+async function handleRefreshSlashCommands(requestId) {
+  try {
+    const commands = await claudeGetSlashCommands(getWorkspaceRoot(), { emitLogs: false });
+    const list = Array.isArray(commands) ? commands : [];
+    sendToHost('slashCommandsUpdated', list, requestId);
+  } catch (error) {
+    sendToHost('slashCommandsUpdated', [], requestId);
+  }
 }
 
 function handleGetNodePath(requestId) {

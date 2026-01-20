@@ -1649,7 +1649,8 @@ export async function sendMessageWithAttachments(message, resumeSessionId = null
  * 通过 SDK 的 supportedCommands() 方法获取完整的命令列表
  * 这个方法不需要发送消息，可以在插件启动时调用
  */
-export async function getSlashCommands(cwd = null) {
+export async function getSlashCommands(cwd = null, options = {}) {
+  const emitLogs = options?.emitLogs !== false;
   try {
     process.env.CLAUDE_CODE_ENTRYPOINT = process.env.CLAUDE_CODE_ENTRYPOINT || 'sdk-ts';
 
@@ -1715,20 +1716,26 @@ export async function getSlashCommands(cwd = null) {
     await result.return?.();
 
     // 输出命令列表（包含 name 和 description）
-    console.log('[SLASH_COMMANDS]', JSON.stringify(slashCommands));
+    if (emitLogs) {
+      console.log('[SLASH_COMMANDS]', JSON.stringify(slashCommands));
+      console.log(JSON.stringify({
+        success: true,
+        commands: slashCommands
+      }));
+    }
 
-    console.log(JSON.stringify({
-      success: true,
-      commands: slashCommands
-    }));
+    return slashCommands;
 
   } catch (error) {
-    console.error('[GET_SLASH_COMMANDS_ERROR]', error.message);
-    console.log(JSON.stringify({
-      success: false,
-      error: error.message,
-      commands: []
-    }));
+    if (emitLogs) {
+      console.error('[GET_SLASH_COMMANDS_ERROR]', error.message);
+      console.log(JSON.stringify({
+        success: false,
+        error: error.message,
+        commands: []
+      }));
+    }
+    return [];
   }
 }
 

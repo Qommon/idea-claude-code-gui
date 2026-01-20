@@ -1,11 +1,169 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs';
+import * as path from 'path';
 import { Logger } from '../utils/logger';
+
+const FILE_LIST_MAX_RESULTS = 200;
+const FILE_LIST_MAX_DEPTH = 15;
+const FILE_LIST_MAX_CHILDREN = 100;
+const FILE_LIST_HIDDEN = new Set(['.DS_Store', '.git', 'node_modules', '.idea']);
+
+interface FileListRequest {
+  query?: string;
+  currentPath?: string;
+}
+
+interface FileListItem {
+  name: string;
+  path: string;
+  absolutePath: string;
+  type: 'file' | 'directory';
+  extension?: string;
+}
 
 /**
  * File Handler
  * Handles file operations using VSCode FileSystem API
  */
 export class FileHandler {
+  private static normalizeDisplayPath(value: string): string {
+    return value.replace(/\\/g, '/');
+  }
+
+  private static shouldHideEntry(name: string): boolean {
+    return FILE_LIST_HIDDEN.has(name);
+  }
+
+  private static buildFileItem(entry: fs.Dirent, entryPath: string, workspaceRoot: string): FileListItem {
+    let relativePath = entryPath;
+    if (workspaceRoot && entryPath.startsWith(workspaceRoot)) {
+      relativePath = path.relative(workspaceRoot, entryPath);
+    }
+
+    const item: FileListItem = {
+      name: entry.name,
+      path: this.normalizeDisplayPath(relativePath),
+      absolutePath: entryPath,
+      type: entry.isDirectory() ? 'directory' : 'file',
+    };
+
+    if (!entry.isDirectory()) {
+      const ext = path.extname(entry.name).replace('.', '');
+      if (ext) {
+        item.extension = ext;
+      }
+    }
+
+    return item;
+  }
+
+  private static resolveBaseDir(workspaceRoot: string, currentPath?: string): string {
+    const trimmed = (currentPath || '').trim();
+    if (!trimmed) {
+      return workspaceRoot;
+    }
+
+    if (path.isAbsolute(trimmed)) {
+      return trimmed;
+    }
+
+    return path.join(workspaceRoot, trimmed);
+  }
+
+  private static async listDirectoryEntries(
+    baseDir: string,
+    workspaceRoot: string,
+    query: string
+  ): Promise<FileListItem[]> {
+    const results: FileListItem[] = [];
+    let entries: fs.Dirent[] = [];
+    try {
+      entries = await fs.promises.readdir(baseDir, { withFileTypes: true });
+    } catch (error) {
+      Logger.debug('[FileHandler] Failed to read directory:', baseDir, error);
+      return results;
+    }
+
+    const lowerQuery = query.toLowerCase();
+    for (const entry of entries) {
+      if (this.shouldHideEntry(entry.name)) continue;
+      if (lowerQuery && !entry.name.toLowerCase().includes(lowerQuery)) continue;
+      const entryPath = path.join(baseDir, entry.name);
+      results.push(this.buildFileItem(entry, entryPath, workspaceRoot));
+      if (results.length >= FILE_LIST_MAX_CHILDREN) {
+        break;
+      }
+    }
+
+    return results;
+  }
+
+  private static async searchFilesRecursive(
+    baseDir: string,
+    workspaceRoot: string,
+    query: string,
+    results: FileListItem[],
+    depth: number
+  ): Promise<void> {
+    if (depth > FILE_LIST_MAX_DEPTH || results.length >= FILE_LIST_MAX_RESULTS) {
+      return;
+    }
+
+    let entries: fs.Dirent[] = [];
+    try {
+      entries = await fs.promises.readdir(baseDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    const lowerQuery = query.toLowerCase();
+    for (const entry of entries) {
+      if (this.shouldHideEntry(entry.name)) continue;
+      const entryPath = path.join(baseDir, entry.name);
+
+      if (entry.name.toLowerCase().includes(lowerQuery)) {
+        results.push(this.buildFileItem(entry, entryPath, workspaceRoot));
+        if (results.length >= FILE_LIST_MAX_RESULTS) {
+          return;
+        }
+      }
+
+      if (entry.isDirectory()) {
+        await this.searchFilesRecursive(entryPath, workspaceRoot, query, results, depth + 1);
+        if (results.length >= FILE_LIST_MAX_RESULTS) {
+          return;
+        }
+      }
+    }
+  }
+
+  public static async listFiles(request: FileListRequest, workspaceRoot?: string): Promise<FileListItem[]> {
+    const root = workspaceRoot || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
+    if (!root) {
+      return [];
+    }
+
+    const query = typeof request?.query === 'string' ? request.query.trim() : '';
+    const baseDir = this.resolveBaseDir(root, request?.currentPath);
+
+    try {
+      const stats = await fs.promises.stat(baseDir);
+      if (!stats.isDirectory()) {
+        return [];
+      }
+    } catch {
+      return [];
+    }
+
+    if (!query) {
+      return this.listDirectoryEntries(baseDir, root, '');
+    }
+
+    const results: FileListItem[] = [];
+    await this.searchFilesRecursive(baseDir, root, query, results, 0);
+    return results;
+  }
+
   /**
    * Open a file in the editor
    */

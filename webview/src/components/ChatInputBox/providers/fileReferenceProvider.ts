@@ -1,5 +1,6 @@
 import type { FileItem, DropdownItemData } from '../types';
 import { getFileIcon, getFolderIcon } from '../../../utils/fileIcons';
+import { sendBridgeEvent } from '../../../utils/bridge';
 
 // 请求队列管理
 let pendingResolve: ((files: FileItem[]) => void) | null = null;
@@ -46,11 +47,11 @@ function setupFileListCallback() {
 /**
  * 发送请求到 Java
  */
-function sendToJava(event: string, payload: Record<string, unknown>) {
-  if (window.sendToJava) {
-    window.sendToJava(`${event}:${JSON.stringify(payload)}`);
-  } else {
-    console.warn('[fileReferenceProvider] sendToJava not available');
+function sendToBridge(event: string, payload: Record<string, unknown>) {
+  const payloadStr = JSON.stringify(payload);
+  const sent = sendBridgeEvent(event, payloadStr);
+  if (!sent) {
+    console.warn('[fileReferenceProvider] Bridge not available');
   }
 }
 
@@ -158,18 +159,8 @@ export async function fileReferenceProvider(
       reject(new DOMException('Aborted', 'AbortError'));
     });
 
-    // 检查 sendToJava 是否可用
-    if (!window.sendToJava) {
-      // 使用默认文件列表进行本地过滤
-      const filtered = filterFiles(DEFAULT_FILES, searchQuery);
-      pendingResolve = null;
-      pendingReject = null;
-      resolve(filtered);
-      return;
-    }
-
     // 发送请求，包含当前路径和搜索关键词
-    sendToJava('list_files', {
+    sendToBridge('list_files', {
       query: searchQuery,        // 搜索关键词
       currentPath: currentPath,  // 当前路径
     });

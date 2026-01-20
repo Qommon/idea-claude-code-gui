@@ -129,6 +129,8 @@ export class VSCodeAdapter implements PlatformAdapter {
       editorFontConfigLoaded: 'onEditorFontConfigReceived',
       mcpServerStatusLoaded: 'updateMcpServerStatus',
       usageStatisticsLoaded: 'updateUsageStatistics',
+      slashCommandsUpdated: 'updateSlashCommands',
+      fileListResult: 'onFileListResult',
       streamingEnabledLoaded: 'updateStreamingEnabled',
       streamingEnabledUpdated: 'updateStreamingEnabled',
       sendShortcutLoaded: 'updateSendShortcut',

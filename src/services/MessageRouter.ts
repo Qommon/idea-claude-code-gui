@@ -215,6 +215,29 @@ export class MessageRouter {
       });
     });
 
+    const handleListFiles = async (message: WebviewMessage) => {
+      try {
+        const content = message.content as { query?: string; currentPath?: string } | undefined;
+        const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
+        const files = await FileHandler.listFiles(content || {}, workspaceRoot);
+        this._sendToWebview({
+          type: 'fileListResult',
+          content: { files },
+          requestId: message.requestId
+        });
+      } catch (error) {
+        Logger.error('Failed to list files:', error);
+        this._sendToWebview({
+          type: 'fileListResult',
+          content: { files: [] },
+          requestId: message.requestId
+        });
+      }
+    };
+
+    this.register('list_files', handleListFiles);
+    this.register('listFiles', handleListFiles);
+
     const openSkillFileChooser = async (message: WebviewMessage) => {
       const content = message.content as { scope?: string; paths?: string[]; path?: string; files?: string[] } | undefined;
       const scope = content?.scope === 'local' ? 'local' : 'global';
