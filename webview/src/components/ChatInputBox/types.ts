@@ -238,7 +238,15 @@ export interface ModelInfo {
  * Claude model list (mutable at runtime)
  * You can call `setClaudeModels()` to replace this list (also persists to localStorage).
  */
-export let CLAUDE_MODELS: ModelInfo[] = [];
+// 默认的 Claude 模型列表（可按需调整）
+const DEFAULT_CLAUDE_MODELS: ModelInfo[] = [
+  { id: 'claude-sonnet-4-5', label: 'claude-sonnet-4-5', description: 'Balanced capability for most tasks' },
+  { id: 'claude-opus-4-5-20251101', label: 'claude-opus-4-5-20251101', description: 'High-capacity model for complex tasks' },
+  { id: 'claude-haiku-4-5', label: 'claude-haiku-4-5', description: 'Lightweight fast model' },
+];
+
+// 使用可变数组对象以便其他模块持有的引用保持有效（避免重新赋值导致引用丢失）
+export let CLAUDE_MODELS: ModelInfo[] = DEFAULT_CLAUDE_MODELS.slice();
 
 /**
  * Replace runtime CLAUDE model list and persist to localStorage for future loads.
@@ -246,7 +254,9 @@ export let CLAUDE_MODELS: ModelInfo[] = [];
  */
 export function setClaudeModels(models: ModelInfo[]) {
   if (!models || !Array.isArray(models)) return;
-  CLAUDE_MODELS = models.map((m) => ({ id: String(m.id), label: String(m.label), description: m.description }));
+  const normalized = models.map((m) => ({ id: String(m.id), label: String(m.label), description: m.description }));
+  // 就地替换数组内容，保持引用稳定，确保 UI 组件持有的 `AVAILABLE_MODELS` 引用仍然有效
+  CLAUDE_MODELS.splice(0, CLAUDE_MODELS.length, ...normalized);
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
       window.localStorage.setItem('claude-available-models', JSON.stringify(CLAUDE_MODELS));
@@ -263,7 +273,8 @@ try {
     if (stored) {
       const parsed = JSON.parse(stored);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        CLAUDE_MODELS = parsed;
+        // 就地替换以保持引用
+        CLAUDE_MODELS.splice(0, CLAUDE_MODELS.length, ...parsed);
       }
     }
   }
