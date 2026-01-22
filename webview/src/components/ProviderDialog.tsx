@@ -97,7 +97,7 @@ export default function ProviderDialog({
         // 编辑模式下不填充默认值，避免覆盖用户实际使用的第三方代理 URL
         setApiUrl(provider.settingsConfig?.env?.ANTHROPIC_BASE_URL || '');
         // Load models array if provided in top-level
-        const modelsArr = provider.models || [];
+        const modelsArr = provider.settingsConfig?.models || [];
         if (Array.isArray(modelsArr) && modelsArr.length > 0) {
           setModels(modelsArr as ModelInfo[]);
         } else {

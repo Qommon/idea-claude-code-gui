@@ -215,8 +215,7 @@ const App = () => {
       }
       return;
     }
-    // 从 settingsConfig.models 或 top-level provider.models 构建映射
-    const models = (provider.settingsConfig?.models || (provider as any).models) || [];
+    const models = provider.settingsConfig?.models || [];
     const mapping: Record<string, string> = { main: '', haiku: '', sonnet: '', opus: '' };
 
     if (Array.isArray(models) && models.length > 0) {
