@@ -34,6 +34,12 @@ export interface ProviderConfig {
       deny?: string[];
     };
   };
+  /** Backwards-compatible top-level models array (optional) */
+  models?: Array<{
+    id: string;
+    label: string;
+    description?: string;
+  }>;
 }
 
 /**

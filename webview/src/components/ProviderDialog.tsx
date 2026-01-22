@@ -98,8 +98,6 @@ export default function ProviderDialog({
         setApiKey(provider.settingsConfig?.env?.ANTHROPIC_AUTH_TOKEN || provider.settingsConfig?.env?.ANTHROPIC_API_KEY || '');
         // 编辑模式下不填充默认值，避免覆盖用户实际使用的第三方代理 URL
         setApiUrl(provider.settingsConfig?.env?.ANTHROPIC_BASE_URL || '');
-        const env = provider.settingsConfig?.env || {};
-
         // Load models array if provided in settingsConfig or top-level
         const modelsArr = provider.settingsConfig?.models || provider.models || [];
         if (Array.isArray(modelsArr) && modelsArr.length > 0) {
