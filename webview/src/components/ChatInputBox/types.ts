@@ -237,7 +237,7 @@ export interface ModelInfo {
 /**
  * Claude model list
  */
-export let CLAUDE_MODELS: ModelInfo[] = [
+export const CLAUDE_MODELS: ModelInfo[] = [
   {
     id: 'claude-sonnet-4-5',
     label: 'Sonnet 4.5',
@@ -254,40 +254,6 @@ export let CLAUDE_MODELS: ModelInfo[] = [
     description: 'Haiku 4.5 · Fastest for quick answers',
   },
 ];
-
-/**
- * Replace runtime CLAUDE model list and persist to localStorage for future loads.
- * Accepts an array of ModelInfo objects.
- */
-export function setClaudeModels(models: ModelInfo[]) {
-  if (!models || !Array.isArray(models)) return;
-  const normalized = models.map((m) => ({ id: String(m.id), label: String(m.label), description: m.description }));
-  // 就地替换数组内容，保持引用稳定，确保 UI 组件持有的 `AVAILABLE_MODELS` 引用仍然有效
-  CLAUDE_MODELS.splice(0, CLAUDE_MODELS.length, ...normalized);
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.setItem('claude-available-models', JSON.stringify(CLAUDE_MODELS));
-    }
-  } catch {
-    // ignore
-  }
-}
-
-// Load persisted models from localStorage if available
-try {
-  if (typeof window !== 'undefined' && window.localStorage) {
-    const stored = window.localStorage.getItem('claude-available-models');
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        // 就地替换以保持引用
-        CLAUDE_MODELS.splice(0, CLAUDE_MODELS.length, ...parsed);
-      }
-    }
-  }
-} catch {
-  // ignore
-}
 
 /**
  * Codex model list

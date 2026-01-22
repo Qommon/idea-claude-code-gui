@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ProviderConfig } from '../types/provider';
-import type { ModelInfo } from './ChatInputBox/types';
-import { setClaudeModels } from './ChatInputBox/types';
 
 interface ProviderDialogProps {
   isOpen: boolean;
@@ -37,7 +35,6 @@ export default function ProviderDialog({
   const [apiKey, setApiKey] = useState('');
   const [apiUrl, setApiUrl] = useState('');
 
-  const [models, setModels] = useState<ModelInfo[]>([]);
   const [showApiKey, setShowApiKey] = useState(false);
   const [jsonConfig, setJsonConfig] = useState('');
   const [jsonError, setJsonError] = useState('');
@@ -64,17 +61,6 @@ export default function ProviderDialog({
     }
   };
 
-  const updateModelsField = (newModels: ModelInfo[]) => {
-    try {
-      const config = jsonConfig ? JSON.parse(jsonConfig) : {};
-      config.models = newModels; // only use top-level models
-      setJsonConfig(JSON.stringify(config, null, 2));
-      setJsonError('');
-    } catch {
-      // ignore
-    }
-  };
-
   // 格式化 JSON
   const handleFormatJson = () => {
     try {
@@ -96,13 +82,6 @@ export default function ProviderDialog({
         setApiKey(provider.settingsConfig?.env?.ANTHROPIC_AUTH_TOKEN || provider.settingsConfig?.env?.ANTHROPIC_API_KEY || '');
         // 编辑模式下不填充默认值，避免覆盖用户实际使用的第三方代理 URL
         setApiUrl(provider.settingsConfig?.env?.ANTHROPIC_BASE_URL || '');
-        // Load models array if provided in top-level
-        const modelsArr = provider.settingsConfig?.models || [];
-        if (Array.isArray(modelsArr) && modelsArr.length > 0) {
-          setModels(modelsArr as ModelInfo[]);
-        } else {
-          setModels([]);
-        }
 
         const config = provider.settingsConfig || {
           env: {
@@ -119,7 +98,6 @@ export default function ProviderDialog({
         setApiKey('');
         setApiUrl('');
 
-        setModels([]);
         const config = {
           env: {
             ANTHROPIC_AUTH_TOKEN: '',
@@ -161,32 +139,6 @@ export default function ProviderDialog({
 
 
 
-  // Model list helpers
-  const addModel = () => {
-    const blank: ModelInfo = { id: '', label: '', description: '' };
-    setModels(prev => {
-      const next = [...prev, blank];
-      updateModelsField(next);
-      return next;
-    });
-  };
-
-  const updateModel = (index: number, key: keyof ModelInfo, value: string) => {
-    setModels(prev => {
-      const next = prev.map((m, i) => i === index ? { ...m, [key]: value } : m);
-      updateModelsField(next);
-      return next;
-    });
-  };
-
-  const removeModel = (index: number) => {
-    setModels(prev => {
-      const next = prev.filter((_, i) => i !== index);
-      updateModelsField(next);
-      return next;
-    });
-  };
-
   const handleJsonChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newJson = e.target.value;
     setJsonConfig(newJson);
@@ -209,13 +161,7 @@ export default function ProviderDialog({
         setApiUrl('');
       }
 
-      // load models[] if present in top-level
-      const modelsArr = config.models || [];
-      if (Array.isArray(modelsArr) && modelsArr.length > 0) {
-        setModels(modelsArr as ModelInfo[]);
-      } else {
-        setModels([]);
-      }
+
       setJsonError('');
     } catch (err) {
       setJsonError(t('settings.provider.dialog.jsonError'));
@@ -223,27 +169,13 @@ export default function ProviderDialog({
   };
 
   const handleSave = () => {
-    // Before saving, merge current edited model lists into jsonConfig
-    try {
-      const cfg = jsonConfig ? JSON.parse(jsonConfig) : {};
-      cfg.models = models;
-      const mergedJson = JSON.stringify(cfg, null, 2);
-      // update runtime models immediately
-      try { setClaudeModels(models); } catch {}
-
-      onSave({
-        providerName,
-        remark,
-        apiKey,
-        apiUrl,
-        jsonConfig: mergedJson,
-      });
-      return;
-    } catch (e) {
-      // fallback to original save if JSON malformed
-    }
-
-    onSave({ providerName, remark, apiKey, apiUrl, jsonConfig });
+    onSave({
+      providerName,
+      remark,
+      apiKey,
+      apiUrl,
+      jsonConfig,
+    });
   };
 
   if (!isOpen) {
@@ -337,46 +269,6 @@ export default function ProviderDialog({
             </small>
           </div>
 
-          <div className="form-group">
-            <label>{t('settings.provider.dialog.modelMapping') || 'Available models'}</label>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <small style={{ color: '#666' }}>{t('settings.provider.dialog.modelListHint') || 'Edit the models array that will populate the model selector.'}</small>
-              <button type="button" className="btn" onClick={addModel} style={{ fontSize: 12 }}>
-                + {t('settings.provider.dialog.add') || 'Add'}
-              </button>
-            </div>
-            <div style={{ marginTop: 8 }}>
-              {models.length === 0 && <div style={{ color: '#888', fontSize: 12 }}>{t('settings.provider.dialog.noModels') || 'No models configured'}</div>}
-              {models.map((m, idx) => (
-                <div key={`model-${idx}`} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                  <input
-                    className="form-input"
-                    placeholder="id"
-                    value={m.id || ''}
-                    onChange={(e) => updateModel(idx, 'id', e.target.value)}
-                    style={{ flex: 2 }}
-                  />
-                  <input
-                    className="form-input"
-                    placeholder="label"
-                    value={m.label || ''}
-                    onChange={(e) => updateModel(idx, 'label', e.target.value)}
-                    style={{ flex: 2 }}
-                  />
-                  <input
-                    className="form-input"
-                    placeholder="description"
-                    value={m.description || ''}
-                    onChange={(e) => updateModel(idx, 'description', e.target.value)}
-                    style={{ flex: 3 }}
-                  />
-                  <button type="button" className="btn btn-secondary" onClick={() => removeModel(idx)}>-</button>
-                </div>
-              ))}
-            </div>
-            <small className="form-hint">{t('settings.provider.dialog.modelMappingHint')}</small>
-          </div>
-
           {/* 高级选项 - 暂时隐藏，后续会使用 */}
           {/* <details className="advanced-section">
             <summary className="advanced-toggle">
@@ -417,20 +309,17 @@ export default function ProviderDialog({
                   value={jsonConfig}
                   onChange={handleJsonChange}
                   placeholder={`{
-    "env": {
-      "ANTHROPIC_API_KEY": "",
-      "ANTHROPIC_AUTH_TOKEN": "",
-      "ANTHROPIC_BASE_URL": "",
-      "ANTHROPIC_MODEL": ""
-    },
-    "models": [
-      { "id": "claude-sonnet-4-5", "label": "Sonnet 4.5", "description": "Sonnet" }
-    ],
-    "model": "sonnet",
-    "alwaysThinkingEnabled": true,
-    "ccSwitchProviderId": "default",
-    "codemossProviderId": ""
-  }`}
+  "env": {
+    "ANTHROPIC_API_KEY": "",
+    "ANTHROPIC_AUTH_TOKEN": "",
+    "ANTHROPIC_BASE_URL": "",
+    "ANTHROPIC_MODEL": ""
+  },
+  "model": "sonnet",
+  "alwaysThinkingEnabled": true,
+  "ccSwitchProviderId": "default",
+  "codemossProviderId": ""
+}`}
                 />
                 {jsonError && (
                   <p className="json-error">

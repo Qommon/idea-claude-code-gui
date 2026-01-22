@@ -71,13 +71,7 @@ export const ButtonArea = ({
       if (!stored) {
         return CLAUDE_MODELS;
       }
-      const mapping = JSON.parse(stored) as {
-        main?: string;
-        haiku?: string;
-        sonnet?: string;
-        opus?: string;
-      };
-      return CLAUDE_MODELS.map((m) => applyModelMapping(m, mapping));
+      return stored;
     } catch {
       return CLAUDE_MODELS;
     }

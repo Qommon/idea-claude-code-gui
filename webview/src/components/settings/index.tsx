@@ -190,26 +190,18 @@ const SettingsView = ({ onClose, initialTab, currentProvider, streamingEnabled: 
     if (typeof window === 'undefined' || !window.localStorage) return;
     if (!provider || !provider.settingsConfig || !provider.settingsConfig.env) {
       try {
-        window.localStorage.removeItem('claude-available-models');
+        window.localStorage.removeItem('claude-model-mapping');
       } catch {
       }
       return;
     }
-    const modelsArr = provider.settingsConfig?.models || [];
+    const mapping = provider.settingsConfig.models || [];
+    const hasValue = Array.isArray(mapping) && mapping.length > 0;
     try {
-      if (Array.isArray(modelsArr) && modelsArr.length > 0) {
-        window.localStorage.setItem('claude-available-models', JSON.stringify(modelsArr));
-        // also update runtime list if module available
-        try {
-          // dynamic import to avoid circular deps
-          import('../ChatInputBox/types').then(mod => {
-            if (mod && typeof mod.setClaudeModels === 'function') {
-              mod.setClaudeModels(modelsArr);
-            }
-          }).catch(() => {});
-        } catch {}
+      if (hasValue) {
+        window.localStorage.setItem('claude-model-mapping', JSON.stringify(mapping));
       } else {
-        window.localStorage.removeItem('claude-available-models');
+        window.localStorage.removeItem('claude-model-mapping');
       }
     } catch {
     }

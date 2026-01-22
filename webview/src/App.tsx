@@ -215,19 +215,8 @@ const App = () => {
       }
       return;
     }
-    const models = provider.settingsConfig?.models || [];
-    const mapping: Record<string, string> = { main: '', haiku: '', sonnet: '', opus: '' };
-
-    if (Array.isArray(models) && models.length > 0) {
-      // 只使用 models 列表中的第一个 id 作为主模型，不再进行按关键词的分类匹配
-      try {
-        mapping.main = models[0].id || '';
-      } catch {
-        mapping.main = '';
-      }
-    }
-
-    const hasValue = Object.values(mapping).some(v => v && String(v).trim().length > 0);
+    const mapping = provider.settingsConfig.models || [];
+    const hasValue = Array.isArray(mapping) && mapping.length > 0;
     try {
       if (hasValue) {
         window.localStorage.setItem('claude-model-mapping', JSON.stringify(mapping));
