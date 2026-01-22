@@ -918,18 +918,14 @@ public class SettingsHandler extends BaseMessageHandler {
                     }
                 }
 
-                // 如果未配置主模型，优先使用 provider.models 列表进行匹配
-                com.google.gson.JsonArray modelsArr = null;
-                if (provider.has("models") && provider.get("models").isJsonArray()) {
-                    modelsArr = provider.getAsJsonArray("models");
-                }
-
-                if (actualModel == null && modelsArr != null && modelsArr.size() > 0) {
-                    // 不再按关键词匹配（sonnet/opus/haiku）；models 数组已包含完整 id，
-                    // 直接使用第一个条目的 id 作为实际模型（若需要更精确映射请在 settingsConfig 中添加 explicit mapping）。
-                    com.google.gson.JsonElement first = modelsArr.get(0);
-                    if (first != null && first.isJsonObject() && first.getAsJsonObject().has("id")) {
-                        actualModel = first.getAsJsonObject().get("id").getAsString();
+                // 如果主模型未配置，根据基础模型 ID 查找对应的默认模型配置
+                if (actualModel == null) {
+                    if (baseModel.contains("sonnet") && env.has("ANTHROPIC_DEFAULT_SONNET_MODEL")) {
+                        actualModel = env.get("ANTHROPIC_DEFAULT_SONNET_MODEL").getAsString();
+                    } else if (baseModel.contains("opus") && env.has("ANTHROPIC_DEFAULT_OPUS_MODEL")) {
+                        actualModel = env.get("ANTHROPIC_DEFAULT_OPUS_MODEL").getAsString();
+                    } else if (baseModel.contains("haiku") && env.has("ANTHROPIC_DEFAULT_HAIKU_MODEL")) {
+                        actualModel = env.get("ANTHROPIC_DEFAULT_HAIKU_MODEL").getAsString();
                     }
                 }
 
