@@ -67,9 +67,7 @@ export default function ProviderDialog({
   const updateModelsField = (newModels: ModelInfo[]) => {
     try {
       const config = jsonConfig ? JSON.parse(jsonConfig) : {};
-      if (!config.settingsConfig) config.settingsConfig = {};
-      config.settingsConfig.models = newModels;
-      config.models = newModels; // top-level for backward compatibility
+      config.models = newModels; // only use top-level models
       setJsonConfig(JSON.stringify(config, null, 2));
       setJsonError('');
     } catch {
@@ -98,8 +96,8 @@ export default function ProviderDialog({
         setApiKey(provider.settingsConfig?.env?.ANTHROPIC_AUTH_TOKEN || provider.settingsConfig?.env?.ANTHROPIC_API_KEY || '');
         // 编辑模式下不填充默认值，避免覆盖用户实际使用的第三方代理 URL
         setApiUrl(provider.settingsConfig?.env?.ANTHROPIC_BASE_URL || '');
-        // Load models array if provided in settingsConfig or top-level
-        const modelsArr = provider.settingsConfig?.models || provider.models || [];
+        // Load models array if provided in top-level
+        const modelsArr = provider.models || [];
         if (Array.isArray(modelsArr) && modelsArr.length > 0) {
           setModels(modelsArr as ModelInfo[]);
         } else {
@@ -211,10 +209,8 @@ export default function ProviderDialog({
         setApiUrl('');
       }
 
-
-
-      // load models[] if present in settingsConfig or top-level models
-      const modelsArr = (config.settingsConfig && config.settingsConfig.models) || config.models || [];
+      // load models[] if present in top-level
+      const modelsArr = config.models || [];
       if (Array.isArray(modelsArr) && modelsArr.length > 0) {
         setModels(modelsArr as ModelInfo[]);
       } else {
@@ -230,8 +226,6 @@ export default function ProviderDialog({
     // Before saving, merge current edited model lists into jsonConfig
     try {
       const cfg = jsonConfig ? JSON.parse(jsonConfig) : {};
-      if (!cfg.settingsConfig) cfg.settingsConfig = {};
-      cfg.settingsConfig.models = models;
       cfg.models = models;
       const mergedJson = JSON.stringify(cfg, null, 2);
       // update runtime models immediately

@@ -22,7 +22,6 @@ export interface ProviderConfig {
       ANTHROPIC_MODEL?: string;
       [key: string]: any;
     };
-    /** Optional array of available models to initialize UI model list */
     models?: Array<{
       id: string;
       label: string;
@@ -34,12 +33,6 @@ export interface ProviderConfig {
       deny?: string[];
     };
   };
-  /** Backwards-compatible top-level models array (optional) */
-  models?: Array<{
-    id: string;
-    label: string;
-    description?: string;
-  }>;
 }
 
 /**

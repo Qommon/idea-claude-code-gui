@@ -195,7 +195,7 @@ const SettingsView = ({ onClose, initialTab, currentProvider, streamingEnabled: 
       }
       return;
     }
-    const modelsArr = provider.settingsConfig.models || provider.models || [];
+    const modelsArr = provider.models || [];
     try {
       if (Array.isArray(modelsArr) && modelsArr.length > 0) {
         window.localStorage.setItem('claude-available-models', JSON.stringify(modelsArr));
