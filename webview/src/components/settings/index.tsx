@@ -188,26 +188,28 @@ const SettingsView = ({ onClose, initialTab, currentProvider, streamingEnabled: 
 
   const syncActiveProviderModelMapping = (provider?: ProviderConfig | null) => {
     if (typeof window === 'undefined' || !window.localStorage) return;
-    if (!provider || !provider.settingsConfig || !provider.settingsConfig.env) {
+    if (!provider || !provider.settingsConfig) {
       try {
-        window.localStorage.removeItem('claude-model-mapping');
+        window.localStorage.removeItem('claude-available-models');
       } catch {
       }
       return;
     }
-    const env = provider.settingsConfig.env as Record<string, any>;
-    const mapping = {
-      main: env.ANTHROPIC_MODEL ?? '',
-      haiku: env.ANTHROPIC_DEFAULT_HAIKU_MODEL ?? '',
-      sonnet: env.ANTHROPIC_DEFAULT_SONNET_MODEL ?? '',
-      opus: env.ANTHROPIC_DEFAULT_OPUS_MODEL ?? '',
-    };
-    const hasValue = Object.values(mapping).some(v => v && String(v).trim().length > 0);
+    const modelsArr = provider.settingsConfig.models || provider.models || [];
     try {
-      if (hasValue) {
-        window.localStorage.setItem('claude-model-mapping', JSON.stringify(mapping));
+      if (Array.isArray(modelsArr) && modelsArr.length > 0) {
+        window.localStorage.setItem('claude-available-models', JSON.stringify(modelsArr));
+        // also update runtime list if module available
+        try {
+          // dynamic import to avoid circular deps
+          import('../ChatInputBox/types').then(mod => {
+            if (mod && typeof mod.setClaudeModels === 'function') {
+              mod.setClaudeModels(modelsArr);
+            }
+          }).catch(() => {});
+        } catch {}
       } else {
-        window.localStorage.removeItem('claude-model-mapping');
+        window.localStorage.removeItem('claude-available-models');
       }
     } catch {
     }

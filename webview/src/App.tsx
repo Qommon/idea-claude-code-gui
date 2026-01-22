@@ -215,13 +215,19 @@ const App = () => {
       }
       return;
     }
-    const env = provider.settingsConfig.env as Record<string, any>;
-    const mapping = {
-      main: env.ANTHROPIC_MODEL ?? '',
-      haiku: env.ANTHROPIC_DEFAULT_HAIKU_MODEL ?? '',
-      sonnet: env.ANTHROPIC_DEFAULT_SONNET_MODEL ?? '',
-      opus: env.ANTHROPIC_DEFAULT_OPUS_MODEL ?? '',
-    };
+    // 从 settingsConfig.models 或 top-level provider.models 构建映射
+    const models = (provider.settingsConfig?.models || (provider as any).models) || [];
+    const mapping: Record<string, string> = { main: '', haiku: '', sonnet: '', opus: '' };
+
+    if (Array.isArray(models) && models.length > 0) {
+      // 只使用 models 列表中的第一个 id 作为主模型，不再进行按关键词的分类匹配
+      try {
+        mapping.main = models[0].id || '';
+      } catch {
+        mapping.main = '';
+      }
+    }
+
     const hasValue = Object.values(mapping).some(v => v && String(v).trim().length > 0);
     try {
       if (hasValue) {

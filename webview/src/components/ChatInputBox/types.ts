@@ -235,25 +235,41 @@ export interface ModelInfo {
 }
 
 /**
- * Claude model list
+ * Claude model list (mutable at runtime)
+ * You can call `setClaudeModels()` to replace this list (also persists to localStorage).
  */
-export const CLAUDE_MODELS: ModelInfo[] = [
-  {
-    id: 'claude-sonnet-4-5',
-    label: 'Sonnet 4.5',
-    description: 'Sonnet 4.5 · Use the default model',
-  },
-  {
-    id: 'claude-opus-4-5-20251101',
-    label: 'Opus 4.5',
-    description: 'Opus 4.5 · Most capable for complex work',
-  },
-  {
-    id: 'claude-haiku-4-5',
-    label: 'Haiku 4.5',
-    description: 'Haiku 4.5 · Fastest for quick answers',
-  },
-];
+export let CLAUDE_MODELS: ModelInfo[] = [];
+
+/**
+ * Replace runtime CLAUDE model list and persist to localStorage for future loads.
+ * Accepts an array of ModelInfo objects.
+ */
+export function setClaudeModels(models: ModelInfo[]) {
+  if (!models || !Array.isArray(models)) return;
+  CLAUDE_MODELS = models.map((m) => ({ id: String(m.id), label: String(m.label), description: m.description }));
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem('claude-available-models', JSON.stringify(CLAUDE_MODELS));
+    }
+  } catch {
+    // ignore
+  }
+}
+
+// Load persisted models from localStorage if available
+try {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    const stored = window.localStorage.getItem('claude-available-models');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        CLAUDE_MODELS = parsed;
+      }
+    }
+  }
+} catch {
+  // ignore
+}
 
 /**
  * Codex model list

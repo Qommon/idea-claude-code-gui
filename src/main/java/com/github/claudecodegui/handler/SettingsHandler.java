@@ -907,10 +907,8 @@ public class SettingsHandler extends BaseMessageHandler {
 
                 com.google.gson.JsonObject env = settingsConfig.getAsJsonObject("env");
 
-                // 根据基础模型 ID 查找对应的环境变量
+                // 优先检查 ANTHROPIC_MODEL（主模型配置）
                 String actualModel = null;
-
-                // 首先检查 ANTHROPIC_MODEL（主模型配置）
                 if (env.has("ANTHROPIC_MODEL") && !env.get("ANTHROPIC_MODEL").isJsonNull()) {
                     String mainModel = env.get("ANTHROPIC_MODEL").getAsString();
                     if (mainModel != null && !mainModel.trim().isEmpty()) {
@@ -918,14 +916,20 @@ public class SettingsHandler extends BaseMessageHandler {
                     }
                 }
 
-                // 如果主模型未配置，根据基础模型 ID 查找对应的默认模型配置
-                if (actualModel == null) {
-                    if (baseModel.contains("sonnet") && env.has("ANTHROPIC_DEFAULT_SONNET_MODEL")) {
-                        actualModel = env.get("ANTHROPIC_DEFAULT_SONNET_MODEL").getAsString();
-                    } else if (baseModel.contains("opus") && env.has("ANTHROPIC_DEFAULT_OPUS_MODEL")) {
-                        actualModel = env.get("ANTHROPIC_DEFAULT_OPUS_MODEL").getAsString();
-                    } else if (baseModel.contains("haiku") && env.has("ANTHROPIC_DEFAULT_HAIKU_MODEL")) {
-                        actualModel = env.get("ANTHROPIC_DEFAULT_HAIKU_MODEL").getAsString();
+                // 如果未配置主模型，优先使用 settingsConfig.models / provider.models 列表进行匹配
+                com.google.gson.JsonArray modelsArr = null;
+                if (settingsConfig.has("models") && settingsConfig.get("models").isJsonArray()) {
+                    modelsArr = settingsConfig.getAsJsonArray("models");
+                } else if (provider.has("models") && provider.get("models").isJsonArray()) {
+                    modelsArr = provider.getAsJsonArray("models");
+                }
+
+                if (actualModel == null && modelsArr != null && modelsArr.size() > 0) {
+                    // 不再按关键词匹配（sonnet/opus/haiku）；models 数组已包含完整 id，
+                    // 直接使用第一个条目的 id 作为实际模型（若需要更精确映射请在 settingsConfig 中添加 explicit mapping）。
+                    com.google.gson.JsonElement first = modelsArr.get(0);
+                    if (first != null && first.isJsonObject() && first.getAsJsonObject().has("id")) {
+                        actualModel = first.getAsJsonObject().get("id").getAsString();
                     }
                 }
 

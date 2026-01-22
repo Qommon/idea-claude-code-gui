@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ProviderConfig } from '../types/provider';
+import type { ModelInfo } from './ChatInputBox/types';
+import { setClaudeModels } from './ChatInputBox/types';
 
 interface ProviderDialogProps {
   isOpen: boolean;
@@ -35,9 +37,7 @@ export default function ProviderDialog({
   const [apiKey, setApiKey] = useState('');
   const [apiUrl, setApiUrl] = useState('');
 
-  const [haikuModel, setHaikuModel] = useState('');
-  const [sonnetModel, setSonnetModel] = useState('');
-  const [opusModel, setOpusModel] = useState('');
+  const [models, setModels] = useState<ModelInfo[]>([]);
   const [showApiKey, setShowApiKey] = useState(false);
   const [jsonConfig, setJsonConfig] = useState('');
   const [jsonError, setJsonError] = useState('');
@@ -64,6 +64,19 @@ export default function ProviderDialog({
     }
   };
 
+  const updateModelsField = (newModels: ModelInfo[]) => {
+    try {
+      const config = jsonConfig ? JSON.parse(jsonConfig) : {};
+      if (!config.settingsConfig) config.settingsConfig = {};
+      config.settingsConfig.models = newModels;
+      config.models = newModels; // top-level for backward compatibility
+      setJsonConfig(JSON.stringify(config, null, 2));
+      setJsonError('');
+    } catch {
+      // ignore
+    }
+  };
+
   // 格式化 JSON
   const handleFormatJson = () => {
     try {
@@ -87,18 +100,19 @@ export default function ProviderDialog({
         setApiUrl(provider.settingsConfig?.env?.ANTHROPIC_BASE_URL || '');
         const env = provider.settingsConfig?.env || {};
 
-        setHaikuModel(env.ANTHROPIC_DEFAULT_HAIKU_MODEL || '');
-        setSonnetModel(env.ANTHROPIC_DEFAULT_SONNET_MODEL || '');
-        setOpusModel(env.ANTHROPIC_DEFAULT_OPUS_MODEL || '');
+        // Load models array if provided in settingsConfig or top-level
+        const modelsArr = provider.settingsConfig?.models || provider.models || [];
+        if (Array.isArray(modelsArr) && modelsArr.length > 0) {
+          setModels(modelsArr as ModelInfo[]);
+        } else {
+          setModels([]);
+        }
 
         const config = provider.settingsConfig || {
           env: {
             ANTHROPIC_AUTH_TOKEN: '',
             ANTHROPIC_BASE_URL: '',
             ANTHROPIC_MODEL: '',
-            ANTHROPIC_DEFAULT_SONNET_MODEL: '',
-            ANTHROPIC_DEFAULT_OPUS_MODEL: '',
-            ANTHROPIC_DEFAULT_HAIKU_MODEL: '',
           }
         };
         setJsonConfig(JSON.stringify(config, null, 2));
@@ -109,17 +123,12 @@ export default function ProviderDialog({
         setApiKey('');
         setApiUrl('');
 
-        setHaikuModel('');
-        setSonnetModel('');
-        setOpusModel('');
+        setModels([]);
         const config = {
           env: {
             ANTHROPIC_AUTH_TOKEN: '',
             ANTHROPIC_BASE_URL: '',
             ANTHROPIC_MODEL: '',
-            ANTHROPIC_DEFAULT_SONNET_MODEL: '',
-            ANTHROPIC_DEFAULT_OPUS_MODEL: '',
-            ANTHROPIC_DEFAULT_HAIKU_MODEL: '',
           }
         };
         setJsonConfig(JSON.stringify(config, null, 2));
@@ -156,22 +165,30 @@ export default function ProviderDialog({
 
 
 
-  const handleHaikuModelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setHaikuModel(value);
-    updateEnvField('ANTHROPIC_DEFAULT_HAIKU_MODEL', value);
+  // Model list helpers
+  const addModel = () => {
+    const blank: ModelInfo = { id: '', label: '', description: '' };
+    setModels(prev => {
+      const next = [...prev, blank];
+      updateModelsField(next);
+      return next;
+    });
   };
 
-  const handleSonnetModelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setSonnetModel(value);
-    updateEnvField('ANTHROPIC_DEFAULT_SONNET_MODEL', value);
+  const updateModel = (index: number, key: keyof ModelInfo, value: string) => {
+    setModels(prev => {
+      const next = prev.map((m, i) => i === index ? { ...m, [key]: value } : m);
+      updateModelsField(next);
+      return next;
+    });
   };
 
-  const handleOpusModelChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setOpusModel(value);
-    updateEnvField('ANTHROPIC_DEFAULT_OPUS_MODEL', value);
+  const removeModel = (index: number) => {
+    setModels(prev => {
+      const next = prev.filter((_, i) => i !== index);
+      updateModelsField(next);
+      return next;
+    });
   };
 
   const handleJsonChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -198,22 +215,12 @@ export default function ProviderDialog({
 
 
 
-      if (Object.prototype.hasOwnProperty.call(env, 'ANTHROPIC_DEFAULT_HAIKU_MODEL')) {
-        setHaikuModel(env.ANTHROPIC_DEFAULT_HAIKU_MODEL || '');
+      // load models[] if present in settingsConfig or top-level models
+      const modelsArr = (config.settingsConfig && config.settingsConfig.models) || config.models || [];
+      if (Array.isArray(modelsArr) && modelsArr.length > 0) {
+        setModels(modelsArr as ModelInfo[]);
       } else {
-        setHaikuModel('');
-      }
-
-      if (Object.prototype.hasOwnProperty.call(env, 'ANTHROPIC_DEFAULT_SONNET_MODEL')) {
-        setSonnetModel(env.ANTHROPIC_DEFAULT_SONNET_MODEL || '');
-      } else {
-        setSonnetModel('');
-      }
-
-      if (Object.prototype.hasOwnProperty.call(env, 'ANTHROPIC_DEFAULT_OPUS_MODEL')) {
-        setOpusModel(env.ANTHROPIC_DEFAULT_OPUS_MODEL || '');
-      } else {
-        setOpusModel('');
+        setModels([]);
       }
       setJsonError('');
     } catch (err) {
@@ -222,13 +229,29 @@ export default function ProviderDialog({
   };
 
   const handleSave = () => {
-    onSave({
-      providerName,
-      remark,
-      apiKey,
-      apiUrl,
-      jsonConfig,
-    });
+    // Before saving, merge current edited model lists into jsonConfig
+    try {
+      const cfg = jsonConfig ? JSON.parse(jsonConfig) : {};
+      if (!cfg.settingsConfig) cfg.settingsConfig = {};
+      cfg.settingsConfig.models = models;
+      cfg.models = models;
+      const mergedJson = JSON.stringify(cfg, null, 2);
+      // update runtime models immediately
+      try { setClaudeModels(models); } catch {}
+
+      onSave({
+        providerName,
+        remark,
+        apiKey,
+        apiUrl,
+        jsonConfig: mergedJson,
+      });
+      return;
+    } catch (e) {
+      // fallback to original save if JSON malformed
+    }
+
+    onSave({ providerName, remark, apiKey, apiUrl, jsonConfig });
   };
 
   if (!isOpen) {
@@ -323,41 +346,41 @@ export default function ProviderDialog({
           </div>
 
           <div className="form-group">
-            <label>{t('settings.provider.dialog.modelMapping')}</label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div>
-                <label htmlFor="sonnetModel">{t('settings.provider.dialog.sonnetModel')}</label>
-                <input
-                  id="sonnetModel"
-                  type="text"
-                  className="form-input"
-                  placeholder={t('settings.provider.dialog.sonnetModelPlaceholder')}
-                  value={sonnetModel}
-                  onChange={handleSonnetModelChange}
-                />
-              </div>
-              <div>
-                <label htmlFor="opusModel">{t('settings.provider.dialog.opusModel')}</label>
-                <input
-                  id="opusModel"
-                  type="text"
-                  className="form-input"
-                  placeholder={t('settings.provider.dialog.opusModelPlaceholder')}
-                  value={opusModel}
-                  onChange={handleOpusModelChange}
-                />
-              </div>
-              <div>
-                <label htmlFor="haikuModel">{t('settings.provider.dialog.haikuModel')}</label>
-                <input
-                  id="haikuModel"
-                  type="text"
-                  className="form-input"
-                  placeholder={t('settings.provider.dialog.haikuModelPlaceholder')}
-                  value={haikuModel}
-                  onChange={handleHaikuModelChange}
-                />
-              </div>
+            <label>{t('settings.provider.dialog.modelMapping') || 'Available models'}</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <small style={{ color: '#666' }}>{t('settings.provider.dialog.modelListHint') || 'Edit the models array that will populate the model selector.'}</small>
+              <button type="button" className="btn" onClick={addModel} style={{ fontSize: 12 }}>
+                + {t('settings.provider.dialog.add') || 'Add'}
+              </button>
+            </div>
+            <div style={{ marginTop: 8 }}>
+              {models.length === 0 && <div style={{ color: '#888', fontSize: 12 }}>{t('settings.provider.dialog.noModels') || 'No models configured'}</div>}
+              {models.map((m, idx) => (
+                <div key={`model-${idx}`} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                  <input
+                    className="form-input"
+                    placeholder="id"
+                    value={m.id || ''}
+                    onChange={(e) => updateModel(idx, 'id', e.target.value)}
+                    style={{ flex: 2 }}
+                  />
+                  <input
+                    className="form-input"
+                    placeholder="label"
+                    value={m.label || ''}
+                    onChange={(e) => updateModel(idx, 'label', e.target.value)}
+                    style={{ flex: 2 }}
+                  />
+                  <input
+                    className="form-input"
+                    placeholder="description"
+                    value={m.description || ''}
+                    onChange={(e) => updateModel(idx, 'description', e.target.value)}
+                    style={{ flex: 3 }}
+                  />
+                  <button type="button" className="btn btn-secondary" onClick={() => removeModel(idx)}>-</button>
+                </div>
+              ))}
             </div>
             <small className="form-hint">{t('settings.provider.dialog.modelMappingHint')}</small>
           </div>
@@ -402,20 +425,20 @@ export default function ProviderDialog({
                   value={jsonConfig}
                   onChange={handleJsonChange}
                   placeholder={`{
-  "env": {
-    "ANTHROPIC_API_KEY": "",
-    "ANTHROPIC_AUTH_TOKEN": "",
-    "ANTHROPIC_BASE_URL": "",
-    "ANTHROPIC_MODEL": "",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": ""
-  },
-  "model": "sonnet",
-  "alwaysThinkingEnabled": true,
-  "ccSwitchProviderId": "default",
-  "codemossProviderId": ""
-}`}
+    "env": {
+      "ANTHROPIC_API_KEY": "",
+      "ANTHROPIC_AUTH_TOKEN": "",
+      "ANTHROPIC_BASE_URL": "",
+      "ANTHROPIC_MODEL": ""
+    },
+    "models": [
+      { "id": "claude-sonnet-4-5", "label": "Sonnet 4.5", "description": "Sonnet" }
+    ],
+    "model": "sonnet",
+    "alwaysThinkingEnabled": true,
+    "ccSwitchProviderId": "default",
+    "codemossProviderId": ""
+  }`}
                 />
                 {jsonError && (
                   <p className="json-error">
