@@ -1,5 +1,5 @@
 <idea-plugin>
-    <id>com.tuyoo.idea-claude-code-gui</id>
+    <id>com.tygit.idea-claude-code-gui</id>
     <name>Claude Code GUI</name>
     <vendor>CodeMossAI</vendor>
 

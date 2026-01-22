@@ -154,8 +154,8 @@ const App = () => {
 
   // ChatInputBox 相关状态
   const [currentProvider, setCurrentProvider] = useState('claude');
-  const [selectedClaudeModel, setSelectedClaudeModel] = useState(CLAUDE_MODELS && CLAUDE_MODELS[0] ? CLAUDE_MODELS[0].id : '');
-  const [selectedCodexModel, setSelectedCodexModel] = useState(CODEX_MODELS && CODEX_MODELS[0] ? CODEX_MODELS[0].id : '');
+  const [selectedClaudeModel, setSelectedClaudeModel] = useState(CLAUDE_MODELS[0].id);
+  const [selectedCodexModel, setSelectedCodexModel] = useState(CODEX_MODELS[0].id);
   const [claudePermissionMode, setClaudePermissionMode] = useState<PermissionMode>('bypassPermissions');
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('bypassPermissions');
   // Codex reasoning effort (thinking depth)
@@ -389,8 +389,8 @@ const App = () => {
     try {
       const saved = localStorage.getItem('model-selection-state');
       let restoredProvider = 'claude';
-      let restoredClaudeModel = (CLAUDE_MODELS && CLAUDE_MODELS[0] && CLAUDE_MODELS[0].id) ? CLAUDE_MODELS[0].id : '';
-      let restoredCodexModel = (CODEX_MODELS && CODEX_MODELS[0] && CODEX_MODELS[0].id) ? CODEX_MODELS[0].id : '';
+      let restoredClaudeModel = CLAUDE_MODELS[0].id;
+      let restoredCodexModel = CODEX_MODELS[0].id;
       let initialPermissionMode: PermissionMode = 'bypassPermissions';
 
       if (saved) {

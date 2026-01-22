@@ -224,7 +224,7 @@ public class SettingsHandler extends BaseMessageHandler {
      * 设置完成后向前端发送确认回调，确保前后端状态同步
      *
      * 容量计算优化：当前端选择基础模型（如 claude-sonnet-4-5）时，
-     * 会从设置中查找对应的实际模型配置（如 provider.models 中的完整 id），
+     * 会从设置中查找对应的实际模型配置（如 ANTHROPIC_DEFAULT_SONNET_MODEL），
      * 以支持带容量后缀的自定义模型名称（如 claude-sonnet-4-5-20250929[1M]）
      */
     private void handleSetModel(String content) {
@@ -863,7 +863,7 @@ public class SettingsHandler extends BaseMessageHandler {
 
     /**
      * 从设置中解析实际使用的模型名称
-     * 支持从 ANTHROPIC_MODEL 或 provider.models 中读取带容量后缀的模型名称
+     * 支持从 ANTHROPIC_MODEL 或 ANTHROPIC_DEFAULT_*_MODEL 中读取带容量后缀的模型名称
      *
      * @param baseModel 前端选择的基础模型 ID (如 claude-sonnet-4-5, claude-opus-4-5-20251101, claude-haiku-4-5)
      * @return 设置中配置的实际模型名称，如果未配置则返回 null
@@ -907,8 +907,10 @@ public class SettingsHandler extends BaseMessageHandler {
 
                 com.google.gson.JsonObject env = settingsConfig.getAsJsonObject("env");
 
-                // 优先检查 ANTHROPIC_MODEL（主模型配置）
+                // 根据基础模型 ID 查找对应的环境变量
                 String actualModel = null;
+
+                // 首先检查 ANTHROPIC_MODEL（主模型配置）
                 if (env.has("ANTHROPIC_MODEL") && !env.get("ANTHROPIC_MODEL").isJsonNull()) {
                     String mainModel = env.get("ANTHROPIC_MODEL").getAsString();
                     if (mainModel != null && !mainModel.trim().isEmpty()) {

@@ -235,18 +235,25 @@ export interface ModelInfo {
 }
 
 /**
- * Claude model list (mutable at runtime)
- * You can call `setClaudeModels()` to replace this list (also persists to localStorage).
+ * Claude model list
  */
-// 默认的 Claude 模型列表（可按需调整）
-const DEFAULT_CLAUDE_MODELS: ModelInfo[] = [
-  { id: 'claude-sonnet-4-5', label: 'claude-sonnet-4-5', description: 'Balanced capability for most tasks' },
-  { id: 'claude-opus-4-5-20251101', label: 'claude-opus-4-5-20251101', description: 'High-capacity model for complex tasks' },
-  { id: 'claude-haiku-4-5', label: 'claude-haiku-4-5', description: 'Lightweight fast model' },
+export let CLAUDE_MODELS: ModelInfo[] = [
+  {
+    id: 'claude-sonnet-4-5',
+    label: 'Sonnet 4.5',
+    description: 'Sonnet 4.5 · Use the default model',
+  },
+  {
+    id: 'claude-opus-4-5-20251101',
+    label: 'Opus 4.5',
+    description: 'Opus 4.5 · Most capable for complex work',
+  },
+  {
+    id: 'claude-haiku-4-5',
+    label: 'Haiku 4.5',
+    description: 'Haiku 4.5 · Fastest for quick answers',
+  },
 ];
-
-// 使用可变数组对象以便其他模块持有的引用保持有效（避免重新赋值导致引用丢失）
-export let CLAUDE_MODELS: ModelInfo[] = DEFAULT_CLAUDE_MODELS.slice();
 
 /**
  * Replace runtime CLAUDE model list and persist to localStorage for future loads.

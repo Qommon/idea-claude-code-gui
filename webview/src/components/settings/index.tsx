@@ -188,7 +188,7 @@ const SettingsView = ({ onClose, initialTab, currentProvider, streamingEnabled: 
 
   const syncActiveProviderModelMapping = (provider?: ProviderConfig | null) => {
     if (typeof window === 'undefined' || !window.localStorage) return;
-    if (!provider || !provider.settingsConfig) {
+    if (!provider || !provider.settingsConfig || !provider.settingsConfig.env) {
       try {
         window.localStorage.removeItem('claude-available-models');
       } catch {
